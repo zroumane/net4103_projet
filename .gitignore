@@ -1,0 +1,15 @@
+# Données Facebook100 (trop lourdes pour git)
+data/
+
+# Sorties produites
+figures/
+results/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# uv
+.python-version
