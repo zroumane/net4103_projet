@@ -125,3 +125,148 @@ Côté recall, les valeurs restent faibles parce que k est petit devant le nombr
 | 0.20 | 0.025 | 0.023 | 0.026 |
 
 Le recall décroît avec f parce que `|E_removed|` augmente proportionnellement, alors que k reste fixé à 400. Pour interpréter le compromis precision / recall, c'est plus parlant de regarder precision et recall ensemble : à f=0.20 par exemple, Adamic-Adar atteint 78 % de precision@100 mais ne récupère que 2.6 % des arêtes retirées avec ses 400 meilleures prédictions.
+
+### 4d
+
+En agrégeant la precision sur toutes les valeurs de k et de f, j'obtiens un classement par école :
+
+| école | CommonNeighbors | Jaccard | AdamicAdar | gagnant |
+|---|---|---|---|---|
+| Amherst41 | 0.61 | 0.65 | 0.63 | Jaccard |
+| Bowdoin47 | 0.62 | 0.53 | 0.63 | AdamicAdar |
+| Caltech36 | 0.53 | 0.40 | 0.54 | AdamicAdar |
+| Hamilton46 | 0.54 | 0.60 | 0.56 | Jaccard |
+| Haverford76 | 0.55 | 0.51 | 0.58 | AdamicAdar |
+| Mich67 | 0.59 | 0.46 | 0.62 | AdamicAdar |
+| Oberlin44 | 0.55 | 0.42 | 0.57 | AdamicAdar |
+| Reed98 | 0.34 | 0.39 | 0.36 | Jaccard |
+| Simmons81 | 0.53 | 0.24 | 0.54 | AdamicAdar |
+| Smith60 | 0.76 | 0.45 | 0.78 | AdamicAdar |
+| Swarthmore42 | 0.50 | 0.65 | 0.51 | Jaccard |
+| Wesleyan43 | 0.70 | 0.60 | 0.71 | AdamicAdar |
+
+Trois enseignements concrets :
+
+1. Adamic-Adar bat systématiquement Common Neighbors, mais l'écart est toujours faible (entre 0.4 et 2.9 points de precision moyenne). Les deux métriques sont essentiellement équivalentes en pratique, AA prenant l'avantage en pondérant les voisins communs par l'inverse du log de leur degré, ce qui rabaisse le poids des hubs amicaux qui apportent peu d'information.
+2. Jaccard est plus instable : il est largement battu sur la majorité des écoles (Simmons -28 pts, Smith -31 pts, Reed -3 pts contre AA), mais il gagne sur 4 écoles (Amherst, Hamilton, Reed, Swarthmore). La normalisation par l'union pénalise les hubs : sur les graphes où les amitiés sont concentrées entre nœuds de degré moyen, ça aide ; sur les graphes avec quelques hubs très connectés, ça défavorise des paires pourtant pertinentes.
+3. La performance absolue dépend beaucoup de l'école. Reed est le mauvais élève (precision moyenne ~0.35) probablement parce que c'est un des plus petits graphes et que la structure y est plus aléatoire ; Smith et Wesleyan sont les plus prévisibles (0.7+).
+
+En résumé, **pour cette tâche j'utiliserais Adamic-Adar** : c'est le plus stable, jamais largement battu, et il intègre une pondération qui a du sens sociologiquement (un ami partagé avec quelqu'un de très populaire est moins informatif qu'un ami partagé avec un nœud moins connecté). Common Neighbors fait presque aussi bien et coûte moins cher (pas de log). Jaccard est à éviter par défaut, sauf à savoir que la structure du graphe le favorise.
+
+### 4e
+
+Code dans [src/q4_link_prediction/gnn.py](src/q4_link_prediction/gnn.py). GCN à 2 couches (hidden=64, embed=32, dropout 0.5), features de nœud = attributs Facebook catégoriels (status, gender, major, dorm, year) en one-hot + degré normalisé. Le score d'une paire est le produit scalaire `z_u · z_v`, l'entraînement se fait en BCE sur les arêtes du graphe résiduel comme positives contre des paires uniformément échantillonnées comme négatives au ratio 1:1, Adam (lr=1e-2), 100 epochs. `GCNLinkPredictor` hérite de `LinkPrediction` comme les autres prédicteurs, ce qui permet de le brancher directement dans le protocole de 4c. Tourné sur 5 écoles (Caltech36, Reed98, Haverford76, Simmons81, Swarthmore42) parce que chaque entraînement coûte ~20 s, et que la comparaison se fait sur les mêmes graphes que 4c.
+
+![GCN vs heuristiques (Haverford)](figures/q4/gnn_precision_at_k_Haverford76.png)
+
+Precision@k=100 moyennée sur les 4 fractions :
+
+| école | CN | Jaccard | AA | GCN |
+|---|---|---|---|---|
+| Caltech36 | 0.59 | 0.42 | 0.59 | 0.27 |
+| Reed98 | 0.39 | 0.36 | 0.39 | 0.20 |
+| Haverford76 | 0.61 | 0.56 | 0.65 | 0.57 |
+| Simmons81 | 0.62 | 0.25 | 0.62 | 0.59 |
+| Swarthmore42 | 0.57 | 0.71 | 0.57 | 0.27 |
+| moyenne | 0.56 | 0.46 | 0.56 | 0.38 |
+
+Le GCN est en moyenne nettement en dessous des heuristiques (-18 points contre AA), avec un comportement non uniforme : sur Haverford et Simmons il fait à peu près jeu égal avec CN/AA, mais sur Caltech, Reed et Swarthmore il perd ~30 points. C'est cohérent avec la nature de la tâche : les heuristiques regardent directement les voisins partagés, qui est le signal le plus fort pour la présence d'une arête, alors que le GCN doit le reconstruire à travers la propagation. Les attributs de nœud (status, dorm, year, major, gender) apportent peu de signal supplémentaire : à l'intérieur d'un dorm, beaucoup de paires existent et beaucoup d'autres non, donc l'information attribut ne discrimine pas bien.
+
+Sur le compromis temps / performance, le GCN coûte 20 à 100× plus cher qu'Adamic-Adar pour un résultat globalement moins bon. Sur les Facebook100, les heuristiques topologiques restent une baseline difficile à battre avec un modèle simple.
+
+## Question 5
+
+### 5b
+
+Code dans [src/q5_label_propagation/gcn.py](src/q5_label_propagation/gcn.py). C'est le GCN à 2 couches du papier, recodé en PyTorch :
+
+```text
+H^(1) = ReLU( D^(-1/2) Â D^(-1/2) X W^(0) )
+H^(1) = Dropout(H^(1), p=0.5)
+H^(2) = D^(-1/2) Â D^(-1/2) H^(1) W^(1)
+```
+
+avec `Â = A + I`, sortie en logits, cross-entropy calculée uniquement sur les nœuds dont le label n'est pas masqué (le masquage du cadre semi-supervisé). Adam à lr=0.01, weight_decay=5e-4, 200 epochs avec early stopping (patience=30) sur un set de validation tiré dans les nœuds étiquetés. Deux couches comme Kipf-Welling : au-delà, le GCN sur un seul graphe oversmoothe (tous les embeddings convergent vers une moyenne globale). Dimension cachée 64 et dropout 0.5 sont les valeurs par défaut du papier. Pas de batch norm : un seul graphe par batch, ça n'aurait rien apporté.
+
+### 5c
+
+Features de nœud : les attributs Facebook (status, gender, major, dorm, year) en one-hot, plus le degré normalisé. Pour prédire `target`, je retire `target` des features — sinon le GCN voit la réponse pour les nœuds non masqués et la propage trivialement aux voisins, ce qui contourne le protocole d'évaluation.
+
+### 5d
+
+Run sur le LCC de Duke14 (n=9 885, m=506 437). Pour chaque attribut, je masque 10/20/30/40 % des labels parmi les nœuds qui en ont un, en écartant au préalable les nœuds avec attribut = 0 (sinon « manquant » devient une classe à part entière). Accuracy et MAE calculées sur les nœuds masqués.
+
+| attribut (n classes) | 10 % | 20 % | 30 % | 40 % |
+|---|---|---|---|---|
+| Major (66) | 0.140 | 0.112 | 0.125 | 0.129 |
+| Dorm (135) | 0.189 | 0.179 | 0.194 | 0.161 |
+| Year (23) | 0.850 | 0.852 | 0.844 | 0.839 |
+| Gender (2) | 0.736 | 0.741 | 0.733 | 0.725 |
+
+| attribut | MAE 10 % | MAE 20 % | MAE 30 % | MAE 40 % |
+|---|---|---|---|---|
+| Major | 18.5 | 17.6 | 17.2 | 18.2 |
+| Dorm | 18.9 | 20.0 | 20.9 | 22.7 |
+| Year | 0.23 | 0.23 | 0.24 | 0.24 |
+| Gender | 0.26 | 0.26 | 0.27 | 0.27 |
+
+![Accuracy vs hidden fraction](figures/q5/accuracy_vs_hidden.png)
+
+La MAE n'a pas vraiment de sens pour `dorm` ou `major` parce que l'index de classe est arbitraire ; pour `gender` (2 classes) c'est `1 - accuracy` et pour `year` c'est interprétable comme un écart en années. Elle est rapportée parce que le sujet la demande.
+
+Comparaison avec le tableau de référence :
+
+| attribut | sujet 10 % | obtenu 10 % | sujet 40 % | obtenu 40 % |
+|---|---|---|---|---|
+| Major | 0.282 | 0.140 | 0.241 | 0.129 |
+| Dorm | 0.529 | 0.189 | 0.463 | 0.161 |
+| Year | 0.913 | 0.850 | 0.891 | 0.839 |
+| Gender | 0.675 | 0.736 | 0.679 | 0.725 |
+
+Year et Gender sont proches des valeurs du sujet (un peu en dessous pour year, un peu au-dessus pour gender). Dorm et Major sont nettement en dessous des valeurs attendues.
+
+### 5e
+
+L'écart entre attributs s'explique par leur assortativité (Q3) combinée au nombre de classes. Year à 0.85 : très assortatif via les promotions, 23 classes ; les amitiés se font massivement entre étudiants de la même cohorte, donc la propagation transmet bien le label. Gender à 0.73 : faiblement assortatif (moyenne 0.05) mais seulement 2 classes ; la baseline « classe majoritaire » sur Duke est déjà autour de 0.6, le GCN gagne ~10 points, ce qui est cohérent avec une homophilie faible mais non nulle. Dorm à 0.19 : assortatif (moyenne 0.23) mais 135 classes, dont beaucoup avec très peu de nœuds — l'accuracy globale est tirée vers le bas par le grand nombre de petites classes, même si 0.19 reste très au-dessus du hasard (1/135 ≈ 0.7 %). Major à 0.13 : faiblement assortatif (0.06) et 66 classes ; les deux effets se cumulent et la structure du graphe porte très peu d'info sur le département.
+
+L'ordre observé (year ≫ gender > dorm > major) correspond à ce que prédisaient les valeurs d'assortativité de Q3 : un classifieur basé sur le graphe est plafonné par la quantité d'information que la structure porte sur l'attribut.
+
+## Question 6
+
+### 6a
+
+À quel attribut individuel (dorm, year, major) correspondent le mieux les communautés détectées par un algorithme de modularité sur les graphes Facebook100 ? Hypothèse, à partir de Q3 : Q3 a montré que dorm et year sont les attributs les plus assortatifs et que major l'est très peu. Les communautés détectées par Louvain devraient donc s'aligner surtout avec dorm ou year selon l'école, et très peu avec major. L'idée derrière : la structure communautaire d'un graphe social est portée par les attributs les plus assortatifs, et un attribut faiblement assortatif ne ressort pas comme cluster même quand l'algo le « cherche ».
+
+### 6b
+
+Code dans [src/q6_communities/run.py](src/q6_communities/run.py). Sur 5 écoles de tailles variées (Caltech36, Reed98, Haverford76, Smith60, JohnsHopkins55) je fais tourner deux algorithmes disponibles dans NetworkX : Louvain (`louvain_communities`) et label propagation algorithmique (`label_propagation_communities`). Pour chaque partition je calcule la modularité, puis je la compare aux attributs dorm / year / major via NMI (Normalized Mutual Information) et ARI (Adjusted Rand Index). Avant le calcul de NMI / ARI je filtre les nœuds dont l'attribut vaut 0, sinon « manquant » est traité comme une catégorie à part entière et tire les scores vers le bas (même précaution qu'en Q3).
+
+Moyenne des scores sur les 5 écoles :
+
+| algo | NMI dorm | NMI year | NMI major | ARI dorm | ARI year | ARI major |
+|---|---|---|---|---|---|---|
+| Louvain | 0.357 | 0.349 | 0.079 | 0.223 | 0.313 | 0.012 |
+| LabelProp | 0.047 | 0.203 | 0.027 | 0.006 | 0.087 | 0.002 |
+
+Détail par école avec Louvain :
+
+| école | NMI dorm | NMI year | NMI major | modularité | nb communautés |
+|---|---|---|---|---|---|
+| Caltech36 | 0.703 | 0.086 | 0.079 | 0.40 | 8 |
+| Reed98 | 0.123 | 0.458 | 0.061 | 0.32 | 5 |
+| Haverford76 | 0.196 | 0.616 | 0.061 | 0.34 | 5 |
+| Smith60 | 0.497 | 0.181 | 0.077 | 0.39 | 18 |
+| JohnsHopkins55 | 0.269 | 0.403 | 0.117 | 0.45 | 9 |
+
+![NMI](figures/q6/nmi_by_school.png)
+![ARI](figures/q6/ari_by_school.png)
+
+### 6c
+
+Pour Louvain, NMI vs dorm et NMI vs year sont du même ordre de grandeur (~0.35) tandis que NMI vs major est un ordre de magnitude plus bas (~0.08). C'est cohérent avec l'hypothèse de 6a : les communautés captent la cohabitation et la promotion, pas le département.
+
+Caltech36 est le cas extrême du dorm avec NMI=0.70, ARI=0.69 — Caltech a un système de *houses* très structurant qui joue le rôle des dorms et qui ressort presque parfaitement comme partition communautaire. Reed et Haverford sont au contraire dominées par la promotion (NMI vs year > 0.45). Smith et Johns Hopkins sont des cas mixtes où dorm et year contribuent ensemble. Le major reste invariablement bas (NMI < 0.13), cohérent avec l'assortativité faible vue en Q3.
+
+Label Propagation est largement battu par Louvain : sur la plupart des écoles il converge en 2-3 macro-communautés avec une modularité quasi nulle (3e-5 à 1e-4), ce qui correspond à un regroupement de quasiment tout le graphe en un seul bloc géant. Louvain est nettement plus fiable pour cette comparaison.
+
+L'expérience confirme l'hypothèse de 6a : à l'intérieur d'une école, l'attribut qui domine la structure communautaire est selon les cas le dorm ou la year. Le major ne ressort jamais comme cluster, ce qui colle avec les valeurs d'assortativité de Q3.
