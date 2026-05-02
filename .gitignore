@@ -1,9 +1,6 @@
 # Données Facebook100 (trop lourdes pour git)
 data/
-
-# Sorties produites
-figures/
-results/
+logs/
 
 # Python
 __pycache__/
@@ -13,3 +10,4 @@ __pycache__/
 
 # uv
 .python-version
+output.pdf

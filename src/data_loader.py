@@ -1,10 +1,14 @@
 from pathlib import Path
 
 import networkx as nx
-import numpy as np
-from scipy.io import loadmat
 
-# colonnes de local_info dans les .mat Facebook100
+# attributs Facebook100. Les .gml utilisent student_fac/major_index ;
+# on remappe vers les noms historiques pour rester cohérent avec le code existant.
+GML_ATTR_RENAME = {
+    "student_fac": "status",
+    "major_index": "major",
+}
+
 ATTR_NAMES = [
     "status",
     "gender",
@@ -18,18 +22,21 @@ ATTR_NAMES = [
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
-def load_facebook_mat(school, data_dir=DATA_DIR):
-    mat = loadmat(str(data_dir / f"{school}.mat"))
-    A = mat["A"]
-    local_info = np.asarray(mat["local_info"], dtype=int)
-
-    G = nx.from_scipy_sparse_array(A)
+def load_facebook_school(school, data_dir=DATA_DIR):
+    G = nx.read_gml(str(data_dir / f"{school}.gml"), label="id")
     G.graph["name"] = school
 
-    for i, attr in enumerate(ATTR_NAMES):
-        nx.set_node_attributes(G, dict(enumerate(local_info[:, i].tolist())), name=attr)
+    for n, data in G.nodes(data=True):
+        data.pop("label", None)
+        for old, new in GML_ATTR_RENAME.items():
+            if old in data:
+                data[new] = data.pop(old)
 
     return G
+
+
+# alias pour ne pas casser les imports existants
+load_facebook_mat = load_facebook_school
 
 
 def largest_connected_component(G):
@@ -42,4 +49,4 @@ def largest_connected_component(G):
 def list_available_schools(data_dir=DATA_DIR):
     if not data_dir.exists():
         return []
-    return sorted(p.stem for p in data_dir.glob("*.mat"))
+    return sorted(p.stem for p in data_dir.glob("*.gml"))

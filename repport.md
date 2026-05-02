@@ -1,10 +1,8 @@
-# NET 4103 — Network Science and Graph Learning
-
-## Question 2
+# Question 2 — Densité, clustering et structure small-world
 
 Tout est calculé sur le LCC, puisque les tailles données dans l'énoncé (762, 6402, 5157) sont celles du LCC.
 
-### 2a
+## 2a — Statistiques globales et distribution des degrés
 
 | école | n | m | densité | C global | ⟨C local⟩ |
 |---|---|---|---|---|---|
@@ -20,7 +18,7 @@ Les coefficients de clustering sont en revanche très élevés par rapport à ce
 
 Le clustering global (transitivité) est plus bas que le clustering local moyen sur les trois graphes. C'est typique des graphes hétérogènes en degré : les hubs ont beaucoup de triplets ouverts qui ne se ferment pas et tirent la transitivité globale vers le bas, tandis que la moyenne des C(v) est dominée par les nombreux nœuds de petit degré qui appartiennent à des cliques.
 
-### 2b
+## 2b — Clustering local en fonction du degré
 
 ![Degré vs clustering local](figures/q2/degree_vs_clustering.png)
 
@@ -28,7 +26,7 @@ Sur les trois graphes, C(v) décroît avec k, à peu près en 1/k sur deux ordre
 
 Caltech se distingue très nettement : densité et clustering local moyen 4 à 5× plus élevés que les deux autres. C'est cohérent avec le fait que Caltech est le plus petit campus du dataset, avec une vie sociale très structurée par les *house systems* qui jouent le rôle des dorms. MIT et Johns Hopkins se ressemblent davantage entre eux : populations comparables, structures comparables.
 
-## Question 3
+# Question 3 — Assortativité par attribut sur les 100 graphes
 
 Calcul effectué sur le LCC de chaque graphe, pour les 100 graphes du dataset. Pour les attributs catégoriels (status, major, dorm, gender) j'utilise l'assortativité de Newman ; pour le degré c'est le coefficient de Pearson sur les degrés des extrémités. Avant le calcul je retire les nœuds dont l'attribut vaut 0 (= manquant dans Facebook100), sinon « manquant » est traité comme une catégorie à part entière, ce qui biaise le résultat.
 
@@ -62,9 +60,9 @@ Le gender est l'attribut le moins assortatif : moyenne de 0.053, distribution ce
 
 L'ordre observé `status > dorm > degree ≈ major ≈ gender` est cohérent avec ce que rapportent Traud *et al.* Les deux processus qui dominent l'amitié sur Facebook 2005 sont l'appartenance au même groupe institutionnel (statut) et la cohabitation (dorm), très loin devant les homophilies plus douces comme le major ou le genre.
 
-## Question 4
+# Question 4 — Prédiction de liens
 
-### 4b
+## 4b — Implémentation des trois métriques topologiques
 
 J'ai écrit la classe abstraite `LinkPrediction` (en suivant le listing 1 du sujet) dans [src/q4_link_prediction/base.py](src/q4_link_prediction/base.py), puis les trois métriques dans [src/q4_link_prediction/metrics.py](src/q4_link_prediction/metrics.py).
 
@@ -76,7 +74,7 @@ Définitions :
 - Jaccard : `|Γ(u) ∩ Γ(v)| / |Γ(u) ∪ Γ(v)|`
 - Adamic / Adar : `Σ_{w ∈ Γ(u) ∩ Γ(v)} 1 / log|Γ(w)|`
 
-### 4c
+## 4c — Protocole d'évaluation et résultats agrégés
 
 Code dans [src/q4_link_prediction/evaluation.py](src/q4_link_prediction/evaluation.py) et [run.py](src/q4_link_prediction/run.py). Le protocole est celui de l'énoncé :
 
@@ -126,7 +124,7 @@ Côté recall, les valeurs restent faibles parce que k est petit devant le nombr
 
 Le recall décroît avec f parce que `|E_removed|` augmente proportionnellement, alors que k reste fixé à 400. Pour interpréter le compromis precision / recall, c'est plus parlant de regarder precision et recall ensemble : à f=0.20 par exemple, Adamic-Adar atteint 78 % de precision@100 mais ne récupère que 2.6 % des arêtes retirées avec ses 400 meilleures prédictions.
 
-### 4d
+## 4d — Comparaison école par école et choix de la métrique
 
 En agrégeant la precision sur toutes les valeurs de k et de f, j'obtiens un classement par école :
 
@@ -153,7 +151,7 @@ Trois enseignements concrets :
 
 En résumé, **pour cette tâche j'utiliserais Adamic-Adar** : c'est le plus stable, jamais largement battu, et il intègre une pondération qui a du sens sociologiquement (un ami partagé avec quelqu'un de très populaire est moins informatif qu'un ami partagé avec un nœud moins connecté). Common Neighbors fait presque aussi bien et coûte moins cher (pas de log). Jaccard est à éviter par défaut, sauf à savoir que la structure du graphe le favorise.
 
-### 4e
+## 4e — Bonus : prédiction par GCN
 
 Code dans [src/q4_link_prediction/gnn.py](src/q4_link_prediction/gnn.py). GCN à 2 couches (hidden=64, embed=32, dropout 0.5), features de nœud = attributs Facebook catégoriels (status, gender, major, dorm, year) en one-hot + degré normalisé. Le score d'une paire est le produit scalaire `z_u · z_v`, l'entraînement se fait en BCE sur les arêtes du graphe résiduel comme positives contre des paires uniformément échantillonnées comme négatives au ratio 1:1, Adam (lr=1e-2), 100 epochs. `GCNLinkPredictor` hérite de `LinkPrediction` comme les autres prédicteurs, ce qui permet de le brancher directement dans le protocole de 4c. Tourné sur 5 écoles (Caltech36, Reed98, Haverford76, Simmons81, Swarthmore42) parce que chaque entraînement coûte ~20 s, et que la comparaison se fait sur les mêmes graphes que 4c.
 
@@ -174,9 +172,9 @@ Le GCN est en moyenne nettement en dessous des heuristiques (-18 points contre A
 
 Sur le compromis temps / performance, le GCN coûte 20 à 100× plus cher qu'Adamic-Adar pour un résultat globalement moins bon. Sur les Facebook100, les heuristiques topologiques restent une baseline difficile à battre avec un modèle simple.
 
-## Question 5
+# Question 5 — Propagation de labels par GCN
 
-### 5b
+## 5b — Implémentation du GCN de Kipf & Welling
 
 Code dans [src/q5_label_propagation/gcn.py](src/q5_label_propagation/gcn.py). C'est le GCN à 2 couches du papier, recodé en PyTorch :
 
@@ -188,11 +186,11 @@ H^(2) = D^(-1/2) Â D^(-1/2) H^(1) W^(1)
 
 avec `Â = A + I`, sortie en logits, cross-entropy calculée uniquement sur les nœuds dont le label n'est pas masqué (le masquage du cadre semi-supervisé). Adam à lr=0.01, weight_decay=5e-4, 200 epochs avec early stopping (patience=30) sur un set de validation tiré dans les nœuds étiquetés. Deux couches comme Kipf-Welling : au-delà, le GCN sur un seul graphe oversmoothe (tous les embeddings convergent vers une moyenne globale). Dimension cachée 64 et dropout 0.5 sont les valeurs par défaut du papier. Pas de batch norm : un seul graphe par batch, ça n'aurait rien apporté.
 
-### 5c
+## 5c — Construction des features de nœud
 
 Features de nœud : les attributs Facebook (status, gender, major, dorm, year) en one-hot, plus le degré normalisé. Pour prédire `target`, je retire `target` des features — sinon le GCN voit la réponse pour les nœuds non masqués et la propage trivialement aux voisins, ce qui contourne le protocole d'évaluation.
 
-### 5d
+## 5d — Accuracy et MAE en fonction de la fraction masquée
 
 Run sur le LCC de Duke14 (n=9 885, m=506 437). Pour chaque attribut, je masque 10/20/30/40 % des labels parmi les nœuds qui en ont un, en écartant au préalable les nœuds avec attribut = 0 (sinon « manquant » devient une classe à part entière). Accuracy et MAE calculées sur les nœuds masqués.
 
@@ -201,7 +199,7 @@ Run sur le LCC de Duke14 (n=9 885, m=506 437). Pour chaque attribut, je masque 1
 | Major (66) | 0.140 | 0.112 | 0.125 | 0.129 |
 | Dorm (135) | 0.189 | 0.179 | 0.194 | 0.161 |
 | Year (23) | 0.850 | 0.852 | 0.844 | 0.839 |
-| Gender (2) | 0.736 | 0.741 | 0.733 | 0.725 |
+| Gender (2) | 0.743 | 0.740 | 0.733 | 0.725 |
 
 | attribut | MAE 10 % | MAE 20 % | MAE 30 % | MAE 40 % |
 |---|---|---|---|---|
@@ -221,23 +219,23 @@ Comparaison avec le tableau de référence :
 | Major | 0.282 | 0.140 | 0.241 | 0.129 |
 | Dorm | 0.529 | 0.189 | 0.463 | 0.161 |
 | Year | 0.913 | 0.850 | 0.891 | 0.839 |
-| Gender | 0.675 | 0.736 | 0.679 | 0.725 |
+| Gender | 0.675 | 0.743 | 0.679 | 0.725 |
 
 Year et Gender sont proches des valeurs du sujet (un peu en dessous pour year, un peu au-dessus pour gender). Dorm et Major sont nettement en dessous des valeurs attendues.
 
-### 5e
+## 5e — Lien entre performance et assortativité
 
 L'écart entre attributs s'explique par leur assortativité (Q3) combinée au nombre de classes. Year à 0.85 : très assortatif via les promotions, 23 classes ; les amitiés se font massivement entre étudiants de la même cohorte, donc la propagation transmet bien le label. Gender à 0.73 : faiblement assortatif (moyenne 0.05) mais seulement 2 classes ; la baseline « classe majoritaire » sur Duke est déjà autour de 0.6, le GCN gagne ~10 points, ce qui est cohérent avec une homophilie faible mais non nulle. Dorm à 0.19 : assortatif (moyenne 0.23) mais 135 classes, dont beaucoup avec très peu de nœuds — l'accuracy globale est tirée vers le bas par le grand nombre de petites classes, même si 0.19 reste très au-dessus du hasard (1/135 ≈ 0.7 %). Major à 0.13 : faiblement assortatif (0.06) et 66 classes ; les deux effets se cumulent et la structure du graphe porte très peu d'info sur le département.
 
 L'ordre observé (year ≫ gender > dorm > major) correspond à ce que prédisaient les valeurs d'assortativité de Q3 : un classifieur basé sur le graphe est plafonné par la quantité d'information que la structure porte sur l'attribut.
 
-## Question 6
+# Question 6 — Détection de communautés et attributs
 
-### 6a
+## 6a — Hypothèse
 
 À quel attribut individuel (dorm, year, major) correspondent le mieux les communautés détectées par un algorithme de modularité sur les graphes Facebook100 ? Hypothèse, à partir de Q3 : Q3 a montré que dorm et year sont les attributs les plus assortatifs et que major l'est très peu. Les communautés détectées par Louvain devraient donc s'aligner surtout avec dorm ou year selon l'école, et très peu avec major. L'idée derrière : la structure communautaire d'un graphe social est portée par les attributs les plus assortatifs, et un attribut faiblement assortatif ne ressort pas comme cluster même quand l'algo le « cherche ».
 
-### 6b
+## 6b — Louvain vs Label Propagation, alignement avec les attributs
 
 Code dans [src/q6_communities/run.py](src/q6_communities/run.py). Sur 5 écoles de tailles variées (Caltech36, Reed98, Haverford76, Smith60, JohnsHopkins55) je fais tourner deux algorithmes disponibles dans NetworkX : Louvain (`louvain_communities`) et label propagation algorithmique (`label_propagation_communities`). Pour chaque partition je calcule la modularité, puis je la compare aux attributs dorm / year / major via NMI (Normalized Mutual Information) et ARI (Adjusted Rand Index). Avant le calcul de NMI / ARI je filtre les nœuds dont l'attribut vaut 0, sinon « manquant » est traité comme une catégorie à part entière et tire les scores vers le bas (même précaution qu'en Q3).
 
@@ -261,7 +259,7 @@ Détail par école avec Louvain :
 ![NMI](figures/q6/nmi_by_school.png)
 ![ARI](figures/q6/ari_by_school.png)
 
-### 6c
+## 6c — Discussion
 
 Pour Louvain, NMI vs dorm et NMI vs year sont du même ordre de grandeur (~0.35) tandis que NMI vs major est un ordre de magnitude plus bas (~0.08). C'est cohérent avec l'hypothèse de 6a : les communautés captent la cohabitation et la promotion, pas le département.
 
