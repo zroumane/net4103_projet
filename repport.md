@@ -1,3 +1,5 @@
+\newpage
+
 # Question 2 — Densité, clustering et structure small-world
 
 Tout est calculé sur le LCC, puisque les tailles données dans l'énoncé (762, 6402, 5157) sont celles du LCC.
